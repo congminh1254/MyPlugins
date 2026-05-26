@@ -1,0 +1,8 @@
+{
+    "name": "PhimFit Plugins",
+    "description": "Kho mở rộng xem phim PhimFit chất lượng cao tiếng Việt và song ngữ.",
+    "manifestVersion": 1,
+    "pluginLists": [
+        "https://raw.githubusercontent.com/congminh1254/MyPlugins/builds/plugins.json"
+    ]
+}
