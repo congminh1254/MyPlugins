@@ -13,7 +13,7 @@ class ExamplePlugin: Plugin() {
         activity = context as? AppCompatActivity
 
         // All providers should be added in this manner
-        registerMainAPI(ExampleProvider())
+        registerMainAPI(PhimFitProvider())
 
         openSettings = {
             val frag = BlankFragment(this)

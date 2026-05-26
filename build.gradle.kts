@@ -11,11 +11,18 @@ buildscript {
         maven("https://jitpack.io")
     }
 
+    configurations.all {
+        resolutionStrategy {
+            force("org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.0")
+            force("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.2.0")
+        }
+    }
+
     dependencies {
         classpath("com.android.tools.build:gradle:8.7.3")
         // Cloudstream gradle plugin which makes everything work and builds plugins
         classpath("com.github.recloudstream:gradle:-SNAPSHOT")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.0")
     }
 }
 
@@ -32,6 +39,14 @@ fun Project.cloudstream(configuration: CloudstreamExtension.() -> Unit) = extens
 fun Project.android(configuration: BaseExtension.() -> Unit) = extensions.getByName<BaseExtension>("android").configuration()
 
 subprojects {
+    configurations.all {
+        resolutionStrategy {
+            force("org.jetbrains.kotlin:kotlin-stdlib:2.2.0")
+            force("org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.2.0")
+            force("org.jetbrains.kotlin:kotlin-reflect:2.2.0")
+        }
+    }
+
     apply(plugin = "com.android.library")
     apply(plugin = "kotlin-android")
     apply(plugin = "com.lagradost.cloudstream3.gradle")
