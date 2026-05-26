@@ -1,0 +1,23 @@
+[
+    {
+        "iconUrl": "https://upload.wikimedia.org/wikipedia/commons/2/2f/Korduene_Logo.png",
+        "fileHash": "sha256-1f33e8c353583ee377cea7ee462ee358b3dbd1779e3e2ab1740e80303235d23b",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/congminh1254/MyPlugins",
+        "fileSize": 48967,
+        "status": 1,
+        "language": "vi",
+        "authors": [
+            "congminh1254"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 2,
+        "internalName": "ExampleProvider",
+        "description": "Ngu\u1ed3n xem phim PhimFit ch\u1ea5t l\u01b0\u1ee3ng cao ti\u1ebfng Vi\u1ec7t v\u00e0 song ng\u1eef.",
+        "url": "https://raw.githubusercontent.com/congminh1254/MyPlugins/builds/ExampleProvider.cs3",
+        "name": "ExampleProvider"
+    }
+]
