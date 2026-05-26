@@ -79,10 +79,21 @@ object LocalHttpServer {
                 if (parts.size < 2) return
                 val rawPath = parts[1]
                 val pathOnly = rawPath.substringBefore('?')
+
+                // Read all remaining request headers until blank line (vital to prevent TCP RST)
+                var rangeHeader: String? = null
+                while (true) {
+                    val line = reader.readLine()
+                    if (line.isNullOrBlank()) break
+                    if (line.startsWith("Range:", ignoreCase = true)) {
+                        rangeHeader = line.substringAfter(":").trim()
+                    }
+                }
+
                 val content = contentMap[pathOnly]
                 val contentType = contentTypeMap[pathOnly] ?: "application/octet-stream"
-
                 val out = BufferedOutputStream(s.getOutputStream())
+
                 if (content == null) {
                     // Support on-demand proxying at /proxy?url=<encoded>
                     if (pathOnly == "/proxy") {
@@ -93,13 +104,11 @@ object LocalHttpServer {
                         }.toMap()
                         val targetUrl = params["url"]
                         val refererParam = params["referer"]
+
                         if (targetUrl != null) {
                             try {
                                 val url = java.net.URL(targetUrl)
-                                val host = url.host.lowercase()
-                                val fallbackReferer = if (host.contains("kingcdn") || host.contains("katcdn")) {
-                                    "https://phimfit.com/"
-                                } else null
+                                val fallbackReferer = "https://phimfit.com/"
 
                                 // Retry strategy for CDN anti-hotlink behavior that may intermittently return 404.
                                 val refererCandidates = linkedSetOf<String?>()
@@ -108,9 +117,6 @@ object LocalHttpServer {
                                 refererCandidates.add(null)
 
                                 var lastStatus = 502
-                                var successBytes: ByteArray? = null
-                                var successType = "application/octet-stream"
-
                                 for ((attemptIndex, referer) in refererCandidates.withIndex()) {
                                     val conn = url.openConnection() as java.net.HttpURLConnection
                                     conn.connectTimeout = 15000
@@ -118,6 +124,10 @@ object LocalHttpServer {
                                     conn.instanceFollowRedirects = true
                                     conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                                     conn.setRequestProperty("Accept", "*/*")
+
+                                    if (rangeHeader != null) {
+                                        conn.setRequestProperty("Range", rangeHeader)
+                                    }
 
                                     if (!referer.isNullOrBlank()) {
                                         conn.setRequestProperty("Referer", referer)
@@ -137,9 +147,33 @@ object LocalHttpServer {
                                     System.err.println("LocalHttpServer proxy fetching: $targetUrl attempt=${attemptIndex + 1} referer=${referer ?: ""} -> status=$status")
 
                                     if (status in 200..299) {
-                                        successBytes = conn.inputStream.use { it.readBytes() }
-                                        successType = conn.contentType ?: "application/octet-stream"
-                                        break
+                                        val statusText = conn.responseMessage ?: "OK"
+                                        val length = conn.contentLength
+                                        val type = conn.contentType ?: "application/octet-stream"
+                                        val contentRange = conn.getHeaderField("Content-Range")
+
+                                        val header = StringBuilder()
+                                        header.append("HTTP/1.1 $status $statusText\r\n")
+                                        if (length >= 0) {
+                                            header.append("Content-Length: $length\r\n")
+                                        }
+                                        header.append("Content-Type: $type\r\n")
+                                        if (contentRange != null) {
+                                            header.append("Content-Range: $contentRange\r\n")
+                                        }
+                                        header.append("Connection: close\r\n")
+                                        header.append("\r\n")
+
+                                        out.write(header.toString().toByteArray())
+                                        conn.inputStream.use { input ->
+                                            val buffer = ByteArray(8192)
+                                            var bytesRead: Int
+                                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                                out.write(buffer, 0, bytesRead)
+                                            }
+                                        }
+                                        out.flush()
+                                        return
                                     }
 
                                     // Retry only on 404 with another referer profile.
@@ -148,24 +182,8 @@ object LocalHttpServer {
                                     }
                                 }
 
-                                if (successBytes != null) {
-                                    val b = successBytes
-                                    val header = StringBuilder()
-                                    header.append("HTTP/1.1 200 OK\r\n")
-                                    header.append("Content-Length: ${b.size}\r\n")
-                                    header.append("Content-Type: $successType\r\n")
-                                    header.append("Connection: close\r\n")
-                                    header.append("\r\n")
-                                    val out = BufferedOutputStream(s.getOutputStream())
-                                    out.write(header.toString().toByteArray())
-                                    out.write(b)
-                                    out.flush()
-                                    return
-                                }
-
                                 val body = "Bad Gateway".toByteArray()
                                 val header = "HTTP/1.1 502 Bad Gateway\r\nContent-Length: ${body.size}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n"
-                                val out = BufferedOutputStream(s.getOutputStream())
                                 out.write(header.toByteArray())
                                 out.write(body)
                                 out.flush()
@@ -176,7 +194,6 @@ object LocalHttpServer {
                             } catch (e: Exception) {
                                 val body = "Bad Gateway".toByteArray()
                                 val header = "HTTP/1.1 502 Bad Gateway\r\nContent-Length: ${body.size}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n"
-                                val out = BufferedOutputStream(s.getOutputStream())
                                 out.write(header.toByteArray())
                                 out.write(body)
                                 out.flush()
