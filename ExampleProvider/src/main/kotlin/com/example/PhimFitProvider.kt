@@ -388,12 +388,16 @@ class PhimFitProvider : MainAPI() {
                                     val encryptedBase64 = app.get(fileUrl, headers = headers).text
                                     val decryptedText = decryptSubtitle(encryptedBase64, cleanData)
                                     if (decryptedText.isNotEmpty()) {
-                                        val subPath = "/sub_${subsceneId}.srt"
-                                        LocalHttpServer.register(subPath, decryptedText.toByteArray(Charsets.UTF_8), "text/plain")
+                                        val isAss = subFile.endsWith(".ass", ignoreCase = true)
+                                        val ext = if (isAss) ".ass" else ".srt"
+                                        val mime = if (isAss) "text/x-ssa" else "application/x-subrip"
+                                        
+                                        val subPath = "/sub_${subsceneId}${ext}"
+                                        LocalHttpServer.register(subPath, decryptedText.toByteArray(Charsets.UTF_8), mime)
                                         val localSubUrl = LocalHttpServer.url(subPath)
                                         
                                         val langLabel = langMap[subLang] ?: subLang.uppercase()
-                                        System.err.println("PhimFit debug: Registered subtitle language=$langLabel localSubUrl=$localSubUrl")
+                                        System.err.println("PhimFit debug: Registered subtitle language=$langLabel localSubUrl=$localSubUrl mime=$mime")
                                         subtitleCallback(
                                             SubtitleFile(
                                                 lang = langLabel,
