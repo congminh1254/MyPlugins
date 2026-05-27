@@ -392,7 +392,7 @@ class PhimFitProvider : MainAPI() {
                                         val ext = if (isAss) ".ass" else ".srt"
                                         val mime = if (isAss) "text/x-ssa" else "application/x-subrip"
                                         
-                                        val subPath = "/sub_${subsceneId}${ext}"
+                                        val subPath = "/sub_${subsceneId}_${subLang}${ext}"
                                         LocalHttpServer.register(subPath, decryptedText.toByteArray(Charsets.UTF_8), mime)
                                         val localSubUrl = LocalHttpServer.url(subPath)
                                         
