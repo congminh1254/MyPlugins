@@ -18,7 +18,39 @@ class PhimFitProvider : MainAPI() {
     override var lang = "vi"
     override val hasMainPage = true
 
-    private val remotePrefix = "mk89nz"
+    private var cachedRemotePrefix: String? = null
+
+    private suspend fun getRemotePrefix(): String {
+        cachedRemotePrefix?.let { return it }
+        val prefix = try {
+            val html = app.get(mainUrl).text
+            val appJsRegex = """/_app/immutable/entry/app\.[a-zA-Z0-9_-]+\.js""".toRegex()
+            val appJsPath = appJsRegex.find(html)?.value ?: throw Exception("Failed to find app.js path")
+            val appJsUrl = "$mainUrl$appJsPath"
+            
+            val appJsContent = app.get(appJsUrl).text
+            val nodeIdRegex = """"/watch/\[fid\]"\s*:\s*\[\s*-(\d+)""".toRegex()
+            val nodeIdMatch = nodeIdRegex.find(appJsContent)?.groupValues?.get(1) ?: throw Exception("Failed to find watch route node mapping")
+            val nodeId = nodeIdMatch.toInt() - 1
+            
+            val nodeJsPattern = """nodes/$nodeId\.[a-zA-Z0-9_-]+\.js""".toRegex()
+            val nodeJsPath = nodeJsPattern.find(appJsContent)?.value ?: throw Exception("Failed to find node JS filename")
+            val nodeJsUrl = "$mainUrl/_app/immutable/$nodeJsPath"
+            
+            val nodeJsContent = app.get(nodeJsUrl).text
+            val prefixRegex = """([a-zA-Z0-9_-]+)/getVideoSrc""".toRegex()
+            val prefixMatch = prefixRegex.find(nodeJsContent)?.groupValues?.get(1) 
+                ?: """([a-zA-Z0-9_-]+)/getEpisodes""".toRegex().find(nodeJsContent)?.groupValues?.get(1)
+                ?: throw Exception("Failed to extract remote prefix")
+                
+            prefixMatch
+        } catch (e: Exception) {
+            System.err.println("PhimFit debug: Failed to extract remote prefix dynamically: ${e.message}")
+            "3w1j30"
+        }
+        cachedRemotePrefix = prefix
+        return prefix
+    }
 
     private fun base64UrlEncode(input: String): String {
         return Base64.encodeToString(
@@ -224,7 +256,8 @@ class PhimFitProvider : MainAPI() {
                 // Fetch episodes of the season using remote call
                 val payload = """["$seasonFid"]"""
                 val base64Payload = base64UrlEncode(payload)
-                val episodesUrl = "$mainUrl/_app/remote/$remotePrefix/getEpisodes?payload=$base64Payload"
+                val prefix = getRemotePrefix()
+                val episodesUrl = "$mainUrl/_app/remote/$prefix/getEpisodes?payload=$base64Payload"
                 
                 val epHeaders = mapOf(
                     "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -302,7 +335,8 @@ class PhimFitProvider : MainAPI() {
 
         val payload = """[{"fid":1,"server":2},"$cleanData","1"]"""
         val base64Payload = base64UrlEncode(payload)
-        val streamUrl = "$mainUrl/_app/remote/$remotePrefix/getVideoSrc?payload=$base64Payload"
+        val prefix = getRemotePrefix()
+        val streamUrl = "$mainUrl/_app/remote/$prefix/getVideoSrc?payload=$base64Payload"
 
         val headers = mapOf(
             "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/120.0.0.0",
