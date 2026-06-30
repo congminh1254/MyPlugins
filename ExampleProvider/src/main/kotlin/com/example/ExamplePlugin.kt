@@ -10,6 +10,7 @@ class ExamplePlugin: Plugin() {
     private var activity: AppCompatActivity? = null
 
     override fun load(context: Context) {
+        Companion.context = context
         activity = context as? AppCompatActivity
 
         // All providers should be added in this manner
@@ -21,5 +22,9 @@ class ExamplePlugin: Plugin() {
                 frag.show(it.supportFragmentManager, "Frag")
             }
         }
+    }
+
+    companion object {
+        var context: Context? = null
     }
 }

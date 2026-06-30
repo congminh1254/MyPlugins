@@ -17,6 +17,9 @@ import androidx.fragment.app.Fragment
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.utils.UIHelper.colorFromAttribute
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * A simple [Fragment] subclass.
@@ -59,36 +62,71 @@ class BlankFragment(private val plugin: ExamplePlugin) : BottomSheetDialogFragme
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.M)
     override fun onViewCreated(
         view: View,
         savedInstanceState: Bundle?
     ) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Initialize views
-        val imageView: ImageView? = view.findViewByName("imageView")
-        val imageView2: ImageView? = view.findViewByName("imageView2")
-        val textView: TextView? = view.findViewByName("textView")
-        val textView2: TextView? = view.findViewByName("textView2")
+        val emailInput: android.widget.EditText? = view.findViewByName("emailEditText")
+        val passwordInput: android.widget.EditText? = view.findViewByName("passwordEditText")
+        val loginBtn: android.widget.Button? = view.findViewByName("loginButton")
+        val statusText: android.widget.TextView? = view.findViewByName("statusTextView")
 
-        // Set text and styling if the views are found
-        textView?.apply {
-            text = getString("hello_fragment")
-            TextViewCompat.setTextAppearance(this, R.style.ResultInfoText)
+        // Load saved credentials if any
+        val prefs = view.context.getSharedPreferences("PhimFitSettings", android.content.Context.MODE_PRIVATE)
+        val savedEmail = prefs.getString("email", null)
+        val savedPassword = prefs.getString("password", null)
+
+        if (!savedEmail.isNullOrBlank()) {
+            emailInput?.setText(savedEmail)
+        }
+        if (!savedPassword.isNullOrBlank()) {
+            passwordInput?.setText(savedPassword)
         }
 
-        textView2?.text = view.context.resources.getText(R.string.legal_notice_text)
+        loginBtn?.setOnClickListener {
+            val email = emailInput?.text?.toString()?.trim() ?: ""
+            val password = passwordInput?.text?.toString() ?: ""
 
-        // Set image resources and tint if the views are found
-        imageView?.apply {
-            setImageDrawable(getDrawable("ic_android_24dp"))
-            imageTintList = ColorStateList.valueOf(view.context.getColor(R.color.white))
-        }
+            if (email.isEmpty() || password.isEmpty()) {
+                statusText?.apply {
+                    visibility = View.VISIBLE
+                    text = "Vui lòng nhập đầy đủ thông tin"
+                }
+                return@setOnClickListener
+            }
 
-        imageView2?.apply {
-            setImageDrawable(getDrawable("ic_android_24dp"))
-            imageTintList = ColorStateList.valueOf(view.context.colorFromAttribute(R.attr.white))
+            statusText?.apply {
+                visibility = View.VISIBLE
+                text = getString("logging_in") ?: "Đang đăng nhập..."
+            }
+            loginBtn.isEnabled = false
+
+            // Perform login in coroutine
+            CoroutineScope(Dispatchers.Main).launch {
+                val provider = PhimFitProvider()
+                
+                val success = provider.login(email, password)
+                
+                if (success) {
+                    statusText?.apply {
+                        text = getString("login_success") ?: "Đăng nhập thành công!"
+                        setTextColor(android.graphics.Color.GREEN)
+                    }
+                    view.postDelayed({
+                        try {
+                            dismiss()
+                        } catch (_: Exception) {}
+                    }, 1000)
+                } else {
+                    loginBtn.isEnabled = true
+                    statusText?.apply {
+                        text = getString("login_failed") ?: "Đăng nhập thất bại"
+                        setTextColor(android.graphics.Color.RED)
+                    }
+                }
+            }
         }
     }
 }

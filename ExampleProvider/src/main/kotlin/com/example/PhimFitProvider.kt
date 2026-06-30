@@ -1,7 +1,10 @@
 package com.example
 
+import android.content.Context
 import android.util.Base64
 import com.lagradost.cloudstream3.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLink
@@ -19,6 +22,83 @@ class PhimFitProvider : MainAPI() {
     override val hasMainPage = true
 
     private var cachedRemotePrefix: String? = null
+    private val loginMutex = Mutex()
+    private var isLocallyLoggedIn = false
+
+    private fun getPrefs(): android.content.SharedPreferences? {
+        return ExamplePlugin.context?.getSharedPreferences("PhimFitSettings", Context.MODE_PRIVATE)
+    }
+
+    suspend fun login(email: String, password: String): Boolean {
+        try {
+            val responseObj = app.post(
+                "$mainUrl/auth/login",
+                data = mapOf(
+                    "email" to email,
+                    "password" to password,
+                    "currentUrl" to "/"
+                ),
+                headers = mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Referer" to "$mainUrl/auth/login"
+                )
+            )
+            
+            // Check if login was successful by checking if we are still redirected to login
+            val checkHtml = app.get(mainUrl, headers = mapOf(
+                "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )).text
+            
+            val isSuccess = !checkHtml.contains("requireLogin:true") && !checkHtml.contains("<title>Đăng nhập</title>")
+            if (isSuccess) {
+                // Save to SharedPreferences
+                getPrefs()?.edit()?.apply {
+                    putString("email", email)
+                    putString("password", password)
+                    apply()
+                }
+                isLocallyLoggedIn = true
+                return true
+            }
+        } catch (e: Exception) {
+            System.err.println("PhimFit login error: ${e.message}")
+            e.printStackTrace()
+        }
+        return false
+    }
+
+    suspend fun ensureLoggedIn(): Boolean {
+        if (isLocallyLoggedIn) return true
+        
+        return loginMutex.withLock {
+            if (isLocallyLoggedIn) return@withLock true
+            
+            // Check if we are already logged in (cookies might still be valid in NiceHttp's cookie jar)
+            try {
+                val checkHtml = app.get(mainUrl, headers = mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )).text
+                if (!checkHtml.contains("requireLogin:true") && !checkHtml.contains("<title>Đăng nhập</title>")) {
+                    isLocallyLoggedIn = true
+                    return@withLock true
+                }
+            } catch (_: Exception) {}
+
+            // Not logged in. Try to log in using saved credentials
+            val prefs = getPrefs()
+            val email = prefs?.getString("email", null)
+            val password = prefs?.getString("password", null)
+            
+            if (!email.isNullOrBlank() && !password.isNullOrBlank()) {
+                val success = login(email, password)
+                if (success) {
+                    isLocallyLoggedIn = true
+                    return@withLock true
+                }
+            }
+            false
+        }
+    }
 
     private suspend fun getRemotePrefix(): String {
         cachedRemotePrefix?.let { return it }
@@ -150,6 +230,7 @@ class PhimFitProvider : MainAPI() {
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
+        ensureLoggedIn()
         val lists = mutableListOf<HomePageList>()
         
         // 1. Mới cập nhật
@@ -189,6 +270,7 @@ class PhimFitProvider : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
+        ensureLoggedIn()
         val allTitles = getAllTitles()
         if (allTitles.isEmpty()) return emptyList()
 
@@ -209,6 +291,7 @@ class PhimFitProvider : MainAPI() {
     }
 
     override suspend fun load(url: String): LoadResponse? {
+        ensureLoggedIn()
         val fid = url.substringAfter("~")
         var dataUrl = "$mainUrl/title/detail~$fid/__data.json"
         
@@ -325,6 +408,7 @@ class PhimFitProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        ensureLoggedIn()
         // data is either a full URL (movie: https://phimfit.com/watch/vj64, episode: https://phimfit.com/mvuj) or a bare FID
         val cleanData = if (data.startsWith("http")) {
             data.trimEnd('/').substringAfterLast("/").substringBefore("~").substringBefore("?")

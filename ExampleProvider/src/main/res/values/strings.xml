@@ -2,4 +2,11 @@
 <resources>
     <string name="hello_fragment">Hello funny fragment!!</string>
     <string name="loaded_from_app_trans">[loaded from app trans]</string>
+    <string name="login_title">Đăng nhập PhimFit</string>
+    <string name="email_hint">Email</string>
+    <string name="password_hint">Mật khẩu</string>
+    <string name="login_btn">Đăng nhập</string>
+    <string name="logging_in">Đang đăng nhập...</string>
+    <string name="login_success">Đăng nhập thành công!</string>
+    <string name="login_failed">Đăng nhập thất bại</string>
 </resources>
