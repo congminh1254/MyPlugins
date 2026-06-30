@@ -46,7 +46,8 @@ class PhimFitProvider : MainAPI() {
                 ),
                 headers = mapOf(
                     "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "Referer" to "$mainUrl/auth/login"
+                    "Referer" to "$mainUrl/auth/login",
+                    "Origin" to mainUrl
                 )
             )
             System.err.println("PhimFit debug: Login POST response code: ${responseObj.code}")
