@@ -26,10 +26,16 @@ class PhimFitProvider : MainAPI() {
     private var isLocallyLoggedIn = false
 
     private fun getPrefs(): android.content.SharedPreferences? {
-        return ExamplePlugin.context?.getSharedPreferences("PhimFitSettings", Context.MODE_PRIVATE)
+        val ctx = ExamplePlugin.context ?: try {
+            com.lagradost.cloudstream3.AcraApplication.context
+        } catch (_: Throwable) {
+            null
+        }
+        return ctx?.getSharedPreferences("PhimFitSettings", Context.MODE_PRIVATE)
     }
 
     suspend fun login(email: String, password: String): Boolean {
+        System.err.println("PhimFit debug: Attempting login for $email...")
         try {
             val responseObj = app.post(
                 "$mainUrl/auth/login",
@@ -43,6 +49,7 @@ class PhimFitProvider : MainAPI() {
                     "Referer" to "$mainUrl/auth/login"
                 )
             )
+            System.err.println("PhimFit debug: Login POST response code: ${responseObj.code}")
             
             // Check if login was successful by checking if we are still redirected to login
             val checkHtml = app.get(mainUrl, headers = mapOf(
@@ -50,12 +57,19 @@ class PhimFitProvider : MainAPI() {
             )).text
             
             val isSuccess = checkHtml.contains("canWatch:true")
+            System.err.println("PhimFit debug: Login verification isSuccess=$isSuccess")
             if (isSuccess) {
                 // Save to SharedPreferences
-                getPrefs()?.edit()?.apply {
-                    putString("email", email)
-                    putString("password", password)
-                    apply()
+                val prefs = getPrefs()
+                if (prefs != null) {
+                    prefs.edit().apply {
+                        putString("email", email)
+                        putString("password", password)
+                        apply()
+                    }
+                    System.err.println("PhimFit debug: Saved credentials to SharedPreferences")
+                } else {
+                    System.err.println("PhimFit debug: Failed to save credentials because SharedPreferences is null")
                 }
                 isLocallyLoggedIn = true
                 return true
@@ -68,7 +82,10 @@ class PhimFitProvider : MainAPI() {
     }
 
     suspend fun ensureLoggedIn(): Boolean {
-        if (isLocallyLoggedIn) return true
+        if (isLocallyLoggedIn) {
+            System.err.println("PhimFit debug: Already locally logged in")
+            return true
+        }
         
         return loginMutex.withLock {
             if (isLocallyLoggedIn) return@withLock true
@@ -79,18 +96,29 @@ class PhimFitProvider : MainAPI() {
                     "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 )).text
                 if (checkHtml.contains("canWatch:true")) {
+                    System.err.println("PhimFit debug: Cookie is still valid. Active session found.")
                     isLocallyLoggedIn = true
                     return@withLock true
+                } else {
+                    System.err.println("PhimFit debug: Cookie is invalid or expired. No active session.")
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                System.err.println("PhimFit debug: Exception checking active session: ${e.message}")
+            }
 
             // Not logged in. Try to log in using saved credentials
             val prefs = getPrefs()
+            if (prefs == null) {
+                System.err.println("PhimFit debug: SharedPreferences is null! ExamplePlugin.context is: ${ExamplePlugin.context}")
+            }
             val email = prefs?.getString("email", null)
             val password = prefs?.getString("password", null)
             
+            System.err.println("PhimFit debug: Saved credentials - email=${email != null}, password=${password != null}")
+
             if (!email.isNullOrBlank() && !password.isNullOrBlank()) {
                 val success = login(email, password)
+                System.err.println("PhimFit debug: Auto-login success=$success")
                 if (success) {
                     isLocallyLoggedIn = true
                     return@withLock true
