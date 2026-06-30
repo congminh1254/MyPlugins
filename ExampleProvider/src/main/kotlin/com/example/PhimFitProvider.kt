@@ -49,7 +49,7 @@ class PhimFitProvider : MainAPI() {
                 "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )).text
             
-            val isSuccess = !checkHtml.contains("requireLogin:true") && !checkHtml.contains("<title>Đăng nhập</title>")
+            val isSuccess = checkHtml.contains("canWatch:true")
             if (isSuccess) {
                 // Save to SharedPreferences
                 getPrefs()?.edit()?.apply {
@@ -78,7 +78,7 @@ class PhimFitProvider : MainAPI() {
                 val checkHtml = app.get(mainUrl, headers = mapOf(
                     "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 )).text
-                if (!checkHtml.contains("requireLogin:true") && !checkHtml.contains("<title>Đăng nhập</title>")) {
+                if (checkHtml.contains("canWatch:true")) {
                     isLocallyLoggedIn = true
                     return@withLock true
                 }
