@@ -259,43 +259,55 @@ class PhimFitProvider : MainAPI() {
     }
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
-        ensureLoggedIn()
-        val lists = mutableListOf<HomePageList>()
-        
-        // 1. Mới cập nhật
-        val allTitles = getAllTitles()
-        if (allTitles.isNotEmpty()) {
-            val homeItems = allTitles.take(40).map { title ->
-                newMovieSearchResponse(
-                    name = if (title.nameVi.isNotEmpty()) title.nameVi else title.nameEn,
-                    url = "$mainUrl/title/detail~${title.fid}",
-                    type = TvType.Movie
-                ) {
-                    this.posterUrl = if (title.tmdbPoster.isNotEmpty()) "https://image.tmdb.org/t/p/w342${title.tmdbPoster}" else null
-                }
+        val diagnosticInfo = StringBuilder()
+        try {
+            diagnosticInfo.append("Plugin context: ${ExamplePlugin.context != null}\n")
+            diagnosticInfo.append("Acra context: ${try { com.lagradost.cloudstream3.AcraApplication.context != null } catch(e: Throwable) { e.message }}\n")
+            
+            val prefs = getPrefs()
+            diagnosticInfo.append("Prefs found: ${prefs != null}\n")
+            
+            val email = prefs?.getString("email", null)
+            val password = prefs?.getString("password", null)
+            diagnosticInfo.append("Credentials: email=${email != null}, pwd=${password != null}\n")
+            
+            val loginCheck1 = try {
+                val checkHtml = app.get(mainUrl, headers = mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )).text
+                "canWatch=${checkHtml.contains("canWatch:true")}, title=${checkHtml.contains("<title>Đăng nhập</title>")}"
+            } catch (e: Exception) {
+                "Error: ${e.message}"
             }
-            lists.add(HomePageList("Mới cập nhật", homeItems))
+            diagnosticInfo.append("Pre-login check: $loginCheck1\n")
+            
+            val loginResult = if (!email.isNullOrBlank() && !password.isNullOrBlank()) {
+                try {
+                    val success = login(email, password)
+                    "Success=$success"
+                } catch (e: Exception) {
+                    "Error: ${e.message}"
+                }
+            } else {
+                "No credentials"
+            }
+            diagnosticInfo.append("Login attempt: $loginResult\n")
+            
+            val loginCheck2 = try {
+                val checkHtml = app.get(mainUrl, headers = mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )).text
+                "canWatch=${checkHtml.contains("canWatch:true")}"
+            } catch (e: Exception) {
+                "Error: ${e.message}"
+            }
+            diagnosticInfo.append("Post-login check: $loginCheck2\n")
+            
+        } catch (e: Exception) {
+            diagnosticInfo.append("General error: ${e.message}\n")
         }
-
-        // 2. Phim thịnh hành trong ngày
-        val trendingToday = fetchSectionTitles("$mainUrl/top/__data.json", isTop = true, key = "day")
-        if (trendingToday.isNotEmpty()) {
-            lists.add(HomePageList("Phim thịnh hành hôm nay", trendingToday))
-        }
-
-        // 3. Phim lẻ mới
-        val newMovies = fetchSectionTitles("$mainUrl/browse/__data.json?type=movie", isTop = false, key = "titles")
-        if (newMovies.isNotEmpty()) {
-            lists.add(HomePageList("Phim lẻ mới nhất", newMovies))
-        }
-
-        // 4. Phim bộ mới
-        val newShows = fetchSectionTitles("$mainUrl/browse/__data.json?type=show", isTop = false, key = "titles")
-        if (newShows.isNotEmpty()) {
-            lists.add(HomePageList("Phim bộ mới nhất", newShows))
-        }
-
-        return newHomePageResponse(lists, false)
+        
+        throw Exception("PhimFit Diagnostics:\n$diagnosticInfo")
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
